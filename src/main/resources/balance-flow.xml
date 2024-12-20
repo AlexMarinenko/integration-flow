@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:int="http://www.springframework.org/schema/integration"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration.xsd http://www.springframework.org/schema/context https://www.springframework.org/schema/context/spring-context.xsd">
+
+
+    <context:component-scan base-package="com.balance.integration"/>
+
+    <!-- Input Channel -->
+    <int:publish-subscribe-channel id="getBalanceRequest" task-executor="taskExecutor"/>
+
+    <!-- Task Executor -->
+    <bean id="taskExecutor" class="org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor">
+        <property name="corePoolSize" value="3"/>
+        <property name="maxPoolSize" value="5"/>
+        <property name="queueCapacity" value="10"/>
+    </bean>
+
+    <!-- Output Channel -->
+    <int:channel id="getBalanceResponse"/>
+
+    <!-- Gateway -->
+    <int:gateway
+        id="balanceGateway"
+        default-request-channel="getBalanceRequest"
+        service-interface="com.balance.integration.service.wallet.WalletGateway"/>
+
+    <!-- Integration Flow -->
+    <int:chain input-channel="getBalanceRequest" output-channel="aggregationChannel">
+        <int:service-activator ref="cacheService" method="process"/>
+        <int:header-enricher>
+            <int:header name="correlationId" value="1"/>
+            <int:header name="sequenceNumber" value="1" type="java.lang.Integer"/>
+            <int:header name="sequenceSize" value="3" type="java.lang.Integer"/>
+        </int:header-enricher>
+    </int:chain>
+
+    <int:chain input-channel="getBalanceRequest" output-channel="aggregationChannel">
+        <int:service-activator ref="bonusService" method="process"/>
+        <int:header-enricher>
+            <int:header name="correlationId" value="1"/>
+            <int:header name="sequenceNumber" value="2" type="java.lang.Integer"/>
+            <int:header name="sequenceSize" value="3" type="java.lang.Integer"/>
+        </int:header-enricher>
+    </int:chain>
+
+    <int:chain input-channel="getBalanceRequest" output-channel="aggregationChannel">
+        <int:service-activator ref="taxService" method="process"/>
+        <int:header-enricher>
+            <int:header name="correlationId" value="1"/>
+            <int:header name="sequenceNumber" value="3" type="java.lang.Integer"/>
+            <int:header name="sequenceSize" value="3" type="java.lang.Integer"/>
+        </int:header-enricher>
+    </int:chain>
+
+    <!-- Aggregation Channel -->
+    <int:channel id="aggregationChannel"/>
+
+    <!-- Aggregator -->
+    <int:aggregator input-channel="aggregationChannel"
+                    output-channel="getBalanceResponse"
+                    ref="balanceAggregator"
+                    method="aggregate"/>
+
+    <int:logging-channel-adapter id="outputLogger" channel="getBalanceResponse"/>
+
+</beans>
